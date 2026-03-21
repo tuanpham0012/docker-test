@@ -1,0 +1,89 @@
+services:
+    alloy:
+        image: grafana/alloy:latest
+        container_name: monitoring_alloy
+        restart: always
+        volumes:
+            - ./config/config.alloy:/etc/alloy/config.alloy
+            # Docker Desktop tự động map socket này, không cần thay đổi
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        command:
+            - run
+            - --server.http.listen-addr=0.0.0.0:12345
+            - /etc/alloy/config.alloy
+        ports:
+            - "12345:12345"
+        networks:
+            - qipf-network
+        # QUAN TRỌNG: Để Alloy nhìn thấy host.docker.internal
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+
+    prometheus:
+        image: prom/prometheus:latest
+        container_name: monitoring_prometheus
+        restart: always
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.enable-remote-write-receiver"
+        volumes:
+            - ./prometheus_data:/prometheus
+        entrypoint:
+            - sh
+            - -c
+            - |
+                echo 'global: { scrape_interval: 15s }' > /etc/prometheus/prometheus.yml && \
+                /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --web.enable-remote-write-receiver --storage.tsdb.path=/prometheus
+        ports:
+            - "9090:9090"
+        networks:
+            - qipf-network
+
+    loki:
+        image: grafana/loki:latest
+        container_name: monitoring_loki
+        restart: always
+        command: -config.file=/etc/loki/local-config.yaml
+        ports:
+            - "3100:3100"
+        networks:
+            - qipf-network
+
+    grafana:
+        image: grafana/grafana:latest
+        container_name: monitoring_grafana
+        restart: always
+        ports:
+            - "3000:3000"
+        volumes:
+            - ./grafana_data:/var/lib/grafana
+        networks:
+            - qipf-network
+
+    # Bỏ service node-exporter
+
+    cadvisor:
+        # Trên Windows bắt buộc dùng image này nếu muốn ổn định (đặc biệt chip ARM/M1/M2 hoặc WSL2)
+        image: gcr.io/cadvisor/cadvisor:latest
+        container_name: monitoring_cadvisor
+        restart: always
+        privileged: true
+        # devices:
+        #     # /dev/kmsg thường không có trên WSL2, có thể bỏ dòng này nếu lỗi
+        #     #- /dev/kmsg:/dev/kmsg
+        volumes:
+            # Map các đường dẫn hệ thống Linux ảo (WSL2)
+            - /:/rootfs:ro
+            - /var/run:/var/run:ro
+            - /sys:/sys:ro
+            - /var/lib/docker/:/var/lib/docker:ro
+            # Windows không có /dev/disk trực tiếp như Linux, cAdvisor có thể báo lỗi phần này nhưng vẫn chạy được
+        ports:
+            - "8080:8080"
+        networks:
+            - qipf-network
+
+networks:
+    qipf-network:
+        external: true
