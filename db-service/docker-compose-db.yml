@@ -8,7 +8,7 @@ services:
         container_name: redis
         image: redis:latest
         ports:
-            - "5011:6379"
+            - "5012:6379"
         volumes:
             - /home/redis/redis_data:/data
         restart: always
